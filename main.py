@@ -1,7 +1,8 @@
 import os
 from github import Github
 from utility import *
-
+from dotenv import load_dotenv
+load_dotenv()
 def main():
     # Initialize GitHub API with token
     g = Github(os.getenv('GITHUB_TOKEN'))
