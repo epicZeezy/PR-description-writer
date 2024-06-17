@@ -1,46 +1,36 @@
 import os
-from github import Github
+import argparse
 from utility import *
+from github_client import GithubClient
+from llm_clients import *
+from prompt_formatting import GeneratePRDescriptionPromptTemplate
 from dotenv import load_dotenv
 load_dotenv()
 def main():
     # Initialize GitHub API with token
-    g = Github(os.getenv('GITHUB_TOKEN'))
+    github_client = GithubClient()
+    parser = argparse.ArgumentParser(description='Process repository path and pull request number.')
+    parser.add_argument('--repo_path', type=str, help='The path to the repository.')
+    parser.add_argument('--pr_number', type=int, help='The pull request number.')
+    # Get the repo path and PR number
+    args = parser.parse_args()
+    repo_path = args.repo_path
+    pull_request_number = args.pr_number
 
-    # Get the repo path and PR number from the environment variables
-    repo_path = os.getenv('REPO_PATH')
-    pull_request_number = int(os.getenv('PR_NUMBER'))
-    
-    # Get the repo object
-    repo = g.get_repo(repo_path)
+    # Get diff for pull request
+    pull_request_diff = github_client.get_pr_diff(repo_path, pull_request_number)
 
-    # Fetch README content (assuming README.md)
-    readme_content = repo.get_contents("README.md")
-    
-    # print(readme_content)
-    # Fetch pull request by number
-    pull_request = repo.get_pull(pull_request_number)
+    # Format data for Gemini prompt
+    pr_description_generator = GeneratePRDescriptionPromptTemplate()
+    pr_description_prompt = pr_description_generator.generate_pr_description_prompt(pull_request_diff)
 
-    # Get the diffs of the pull request
-    pull_request_diffs = [
-        {
-            "filename": file.filename,
-            "patch": file.patch 
-        } 
-        for file in pull_request.get_files()
-    ]
-    
-    # Get the commit messages associated with the pull request
-    commit_messages = [commit.commit.message for commit in pull_request.get_commits()]
+    # Ollama local LLM call
+    llm = new_ollama_client()
+    llm_response = llm.invoke(pr_description_prompt)
+    print(llm_response.content)
 
-    # Format data for OpenAI prompt
-    prompt = format_data_for_openai(pull_request_diffs, readme_content, commit_messages)
-
-    # Call OpenAI to generate the updated README content
-    updated_readme = call_openai(prompt)
-
-    # Create PR for Updated PR
-    update_readme_and_create_pr(repo, updated_readme, readme_content.sha)
+    # Do some structured output for LLM response
+    # github_client.update_pr_description(repo_path, llm_response.content, pull_request_number)
 
 if __name__ == '__main__':
     main()
